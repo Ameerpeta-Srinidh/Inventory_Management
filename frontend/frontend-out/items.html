@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stock MS · Items</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="nav">
+  <a href="dashboard.html" class="nav-logo">
+    Stock MS <span class="sep">/</span> <span class="dept">SCIS</span>
+  </a>
+  <div class="nav-right">
+    <div class="nav-info">
+      <span class="nav-name" id="navName"></span>
+      <span class="chip" id="navChip"></span>
+    </div>
+    <button class="btn-ghost" onclick="App.logout()">Sign out</button>
+  </div>
+</nav>
+
+<div class="page">
+
+  <div class="page-head">
+    <div class="page-head-left">
+      <button class="back-link" onclick="history.back()" style="margin-bottom:8px">← Dashboard</button>
+      <div class="page-title" id="roomTitle">Room</div>
+      <div class="page-sub" id="roomSub"></div>
+    </div>
+    <input class="search-input" id="searchBox" placeholder="Search items…" oninput="render()">
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th>Asset Code</th>
+          <th>Brand</th>
+          <th>Price</th>
+          <th>Status</th>
+          <th>Verified</th>
+          <th>Last Verified</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="tbody"><tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--text3)">Loading…</td></tr></tbody>
+    </table>
+    <div class="empty" id="emptyMsg" style="display:none">No items found.</div>
+  </div>
+
+</div>
+
+<!-- Modal -->
+<div class="modal-overlay" id="overlay">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-title-text">Verify Item</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-content">
+      <div id="modalDetails"></div>
+      <div class="verify-outcome" id="outcome"></div>
+    </div>
+    <div class="modal-footer" id="modalFoot">
+      <button class="btn-outline" onclick="closeModal()">Cancel</button>
+      <button class="btn-modal-confirm" id="btnVerify" onclick="doVerify()">Confirm verify</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script src="js/app.js"></script>
+<script>
+  if (!App.user) location.href = 'index.html';
+
+  const u = App.user;
+  document.getElementById('navName').textContent = u.name;
+  const chip = document.getElementById('navChip');
+  chip.textContent = u.role;
+  chip.className = 'chip ' + (u.role === 'admin' ? 'chip-blue' : u.role === 'faculty' ? 'chip-green' : 'chip-amber');
+
+  const room = new URLSearchParams(location.search).get('room');
+  if (!room) location.href = 'dashboard.html';
+
+  document.getElementById('roomTitle').textContent = room;
+
+  let allItems   = [];
+  let selectedId = null;
+
+  async function loadItems() {
+    try {
+      // Verify this user can see this room by checking myRooms
+      const rooms = await App.myRooms();
+      const roomData = rooms.find(r => r.code === room);
+      if (!roomData && u.role !== 'admin') { location.href = 'dashboard.html'; return; }
+
+      allItems = await App.roomItems(room);
+
+      document.getElementById('roomSub').textContent = roomData
+        ? `${roomData.building} · ${roomData.room_type === 'personal' ? 'Personal room' : 'Common room'} · ${allItems.length} items`
+        : `${allItems.length} items`;
+
+      render();
+    } catch (e) {
+      document.getElementById('tbody').innerHTML =
+        `<tr><td colspan="8" style="text-align:center;padding:2rem;color:var(--red)">Failed to load: ${e.message}</td></tr>`;
+    }
+  }
+
+  function render() {
+    const q = document.getElementById('searchBox').value.toLowerCase();
+    const items = allItems.filter(i =>
+      i.name.toLowerCase().includes(q) ||
+      i.asset_code.toLowerCase().includes(q) ||
+      (i.brand || '').toLowerCase().includes(q)
+    );
+
+    document.getElementById('emptyMsg').style.display = items.length ? 'none' : 'block';
+
+    // last_verified_at comes as ISO datetime string from DB
+    // is_verified is derived: last_verified_at is not null
+    document.getElementById('tbody').innerHTML = items.map(it => {
+      const verified = !!it.last_verified_at;
+      const label    = statusLabel(it.status);
+      return `
+        <tr>
+          <td class="td-main">${it.name}</td>
+          <td><span class="mono-tag">${it.asset_code}</span></td>
+          <td>${it.brand || '—'}</td>
+          <td>${rupee(it.price)}</td>
+          <td><span class="dot-status dot-${statusClass(it.status)}">${label}</span></td>
+          <td><span class="chip ${verified ? 'chip-green' : 'chip-red'}">${verified ? 'Yes' : 'No'}</span></td>
+          <td style="font-size:0.67rem;color:var(--text3)">${fmtDate(it.last_verified_at)}</td>
+          <td>
+            <button class="btn-verify-row ${verified ? 'verified' : ''}" onclick="openModal(${it.id})">
+              ${verified ? 'Re-verify' : 'Verify'}
+            </button>
+          </td>
+        </tr>`;
+    }).join('');
+  }
+
+  function openModal(id) {
+    selectedId = id;
+    const it = allItems.find(i => i.id === id);
+    const verified = !!it.last_verified_at;
+    document.getElementById('modalDetails').innerHTML = `
+      <div class="detail-row"><span class="detail-key">Item</span><span class="detail-val">${it.name}</span></div>
+      <div class="detail-row"><span class="detail-key">Asset Code</span><span class="detail-val" style="color:var(--accent);font-size:0.67rem">${it.asset_code}</span></div>
+      <div class="detail-row"><span class="detail-key">Room</span><span class="detail-val">${room}</span></div>
+      <div class="detail-row"><span class="detail-key">Brand</span><span class="detail-val">${it.brand || '—'}</span></div>
+      <div class="detail-row"><span class="detail-key">Price</span><span class="detail-val">${rupee(it.price)}</span></div>
+      <div class="detail-row"><span class="detail-key">Status</span><span class="detail-val"><span class="dot-status dot-${statusClass(it.status)}">${statusLabel(it.status)}</span></span></div>
+      <div class="detail-row"><span class="detail-key">Currently verified</span><span class="detail-val"><span class="chip ${verified ? 'chip-green' : 'chip-red'}">${verified ? 'Yes' : 'No'}</span></span></div>
+    `;
+    document.getElementById('outcome').className = 'verify-outcome';
+    document.getElementById('outcome').innerHTML = '';
+    document.getElementById('btnVerify').disabled = false;
+    document.getElementById('modalFoot').style.display = 'flex';
+    document.getElementById('overlay').classList.add('open');
+  }
+
+  async function doVerify() {
+    document.getElementById('btnVerify').disabled = true;
+    const res = await App.verify(selectedId);
+    const out = document.getElementById('outcome');
+    if (res.ok) {
+      // Update local state
+      const it = allItems.find(i => i.id === selectedId);
+      it.last_verified_at = res.scanned_at || new Date().toISOString();
+      out.className = 'verify-outcome ok';
+      out.innerHTML = `<div class="verify-outcome-icon">✓</div><div class="verify-outcome-msg">Verified</div><div class="verify-outcome-sub">Logged by ${u.name} · ${fmtDate(it.last_verified_at)}</div>`;
+      render();
+      toast('Item verified');
+    } else {
+      out.className = 'verify-outcome fail';
+      out.innerHTML = `<div class="verify-outcome-icon">✕</div><div class="verify-outcome-msg">Not authorised</div><div class="verify-outcome-sub">${res.msg}</div>`;
+      document.getElementById('btnVerify').disabled = false;
+    }
+  }
+
+  function closeModal() {
+    document.getElementById('overlay').classList.remove('open');
+    selectedId = null;
+  }
+
+  document.getElementById('overlay').addEventListener('click', e => { if (e.target.id === 'overlay') closeModal(); });
+
+  loadItems();
+</script>
+</body>
+</html>

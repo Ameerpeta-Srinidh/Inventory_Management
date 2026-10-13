@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stock MS · Admin</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="nav">
+  <a href="dashboard.html" class="nav-logo">
+    Stock MS <span class="sep">/</span> <span class="dept">SCIS</span>
+  </a>
+  <div class="nav-right">
+    <div class="nav-info">
+      <span id="navName"></span>
+      <span class="chip chip-blue">admin</span>
+    </div>
+    <button class="btn-ghost" onclick="App.logout()">Sign out</button>
+  </div>
+</nav>
+
+<div class="page">
+
+  <div class="page-head">
+    <div class="page-head-left">
+      <button class="back-link" onclick="location.href='dashboard.html'" style="margin-bottom:8px">← Dashboard</button>
+      <div class="page-title">Admin Panel</div>
+      <div class="page-sub">Manage users, rooms, assignments and audit log</div>
+    </div>
+  </div>
+
+  <div class="tab-nav">
+    <button class="tab-item active" onclick="tab('users')">Users</button>
+    <button class="tab-item" onclick="tab('rooms')">Rooms</button>
+    <button class="tab-item" onclick="tab('assign')">Assignments</button>
+    <button class="tab-item" onclick="tab('log')">Scan Log</button>
+  </div>
+
+  <!-- USERS -->
+  <div class="tab-pane active" id="pane-users">
+    <div class="card" style="max-width:520px;margin-bottom:1.5rem">
+      <div class="card-body">
+        <div class="section-label" style="margin-bottom:1rem">Add User</div>
+        <div class="form-group">
+          <label class="form-label">Full Name</label>
+          <input class="form-input" id="uName" placeholder="Dr. Example">
+        </div>
+        <div class="form-row-2">
+          <div class="form-group">
+            <label class="form-label">Email</label>
+            <input class="form-input" id="uEmail" type="email" placeholder="email@university.edu">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Role</label>
+            <select class="form-select" id="uRole">
+              <option value="faculty">Faculty</option>
+              <option value="incharge">Incharge</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn-primary" style="width:auto;padding:8px 20px" onclick="addUser()">Add user</button>
+      </div>
+    </div>
+    <div class="section-label">All users</div>
+    <div class="data-list" id="userList"><div class="empty">Loading…</div></div>
+  </div>
+
+  <!-- ROOMS -->
+  <div class="tab-pane" id="pane-rooms">
+    <div class="card" style="max-width:520px;margin-bottom:1.5rem">
+      <div class="card-body">
+        <div class="section-label" style="margin-bottom:1rem">Add Room</div>
+        <div class="form-row-2">
+          <div class="form-group">
+            <label class="form-label">Room Code</label>
+            <input class="form-input" id="rCode" placeholder="e.g. Lab-4B">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Building</label>
+            <select class="form-select" id="rBuilding">
+              <option>AI_Building</option>
+              <option>EB_AI_Building</option>
+              <option>CMSD</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Type</label>
+          <select class="form-select" id="rType">
+            <option value="personal">Personal (faculty room)</option>
+            <option value="common">Common (lab / library)</option>
+          </select>
+        </div>
+        <button class="btn-primary" style="width:auto;padding:8px 20px" onclick="addRoom()">Add room</button>
+      </div>
+    </div>
+    <div class="section-label">All rooms</div>
+    <div class="data-list" id="roomList"><div class="empty">Loading…</div></div>
+  </div>
+
+  <!-- ASSIGNMENTS -->
+  <div class="tab-pane" id="pane-assign">
+    <div class="card" style="max-width:520px;margin-bottom:1.5rem">
+      <div class="card-body">
+        <div class="section-label" style="margin-bottom:1rem">Assign Room to User</div>
+        <div class="form-row-2">
+          <div class="form-group">
+            <label class="form-label">User</label>
+            <select class="form-select" id="aUser"></select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Room</label>
+            <select class="form-select" id="aRoom"></select>
+          </div>
+        </div>
+        <div style="font-size:0.65rem;color:var(--text3);margin-bottom:0.9rem">
+          Faculty → personal rooms &nbsp;·&nbsp; Incharge → common rooms
+        </div>
+        <button class="btn-primary" style="width:auto;padding:8px 20px" onclick="assign()">Assign</button>
+      </div>
+    </div>
+    <div class="section-label">Current assignments</div>
+    <div class="data-list" id="assignList"><div class="empty">Loading…</div></div>
+  </div>
+
+  <!-- SCAN LOG -->
+  <div class="tab-pane" id="pane-log">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">
+      <div class="section-label" style="margin:0">Verification history</div>
+      <span id="logCount" style="font-size:0.65rem;color:var(--text3)"></span>
+    </div>
+    <div class="log-list" id="logList"><div class="empty">Loading…</div></div>
+  </div>
+
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script src="js/app.js"></script>
+<script>
+  if (!App.user || App.user.role !== 'admin') location.href = 'dashboard.html';
+  document.getElementById('navName').textContent = App.user.name;
+
+  // Local cache (refreshed on each tab switch)
+  let lUsers   = [];
+  let lRooms   = [];
+  let lAssign  = [];
+
+  // ── TAB SWITCHING ──
+
+  function tab(name) {
+    document.querySelectorAll('.tab-item').forEach((b, i) =>
+      b.classList.toggle('active', ['users','rooms','assign','log'][i] === name));
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    document.getElementById(`pane-${name}`).classList.add('active');
+    loadTab(name);
+  }
+
+  async function loadTab(name) {
+    try {
+      if (name === 'users') {
+        lUsers = await App.listUsers();
+        renderUsers();
+      } else if (name === 'rooms') {
+        lRooms = await App.listRooms();
+        renderRooms();
+      } else if (name === 'assign') {
+        [lUsers, lRooms, lAssign] = await Promise.all([App.listUsers(), App.listRooms(), App.listAssignments()]);
+        fillSelects();
+        renderAssign();
+      } else if (name === 'log') {
+        renderLog(await App.scanLog());
+      }
+    } catch (e) {
+      toast('Error: ' + e.message);
+    }
+  }
+
+  // ── RENDER ──
+
+  function renderUsers() {
+    document.getElementById('userList').innerHTML = lUsers.map(u => `
+      <div class="data-list-row">
+        <div class="data-list-left">
+          <span>${u.name}</span>
+          <span style="color:var(--text3);font-size:0.67rem">${u.email}</span>
+        </div>
+        <div class="data-list-right">
+          <span class="chip ${u.role==='admin'?'chip-blue':u.role==='faculty'?'chip-green':'chip-amber'}">${u.role}</span>
+          ${u.id !== App.user.id ? `<button class="btn-remove" onclick="removeUser(${u.id})">remove</button>` : ''}
+        </div>
+      </div>
+    `).join('') || `<div class="empty">No users.</div>`;
+  }
+
+  function renderRooms() {
+    document.getElementById('roomList').innerHTML = lRooms.map(r => `
+      <div class="data-list-row">
+        <div class="data-list-left">
+          <span>${r.code}</span>
+          <span style="color:var(--text3);font-size:0.67rem">${r.building}</span>
+        </div>
+        <div class="data-list-right">
+          <span class="chip ${r.room_type==='personal'?'chip-green':'chip-amber'}">${r.room_type}</span>
+          <span style="font-size:0.67rem;color:var(--text3)">${r.assigned_to || 'Unassigned'}</span>
+        </div>
+      </div>
+    `).join('') || `<div class="empty">No rooms.</div>`;
+  }
+
+  function renderAssign() {
+    document.getElementById('assignList').innerHTML = lAssign.map(a => `
+      <div class="data-list-row">
+        <div class="data-list-left">
+          <span>${a.uname}</span>
+          <span class="chip ${a.role==='faculty'?'chip-green':'chip-amber'}">${a.role}</span>
+        </div>
+        <div class="data-list-right">
+          <span style="color:var(--accent);font-size:0.72rem">${a.room_code}</span>
+          <button class="btn-remove" onclick="removeAssign(${a.id})">remove</button>
+        </div>
+      </div>
+    `).join('') || `<div class="empty">No assignments yet.</div>`;
+  }
+
+  function renderLog(logs) {
+    document.getElementById('logCount').textContent = `${logs.length} entries`;
+    document.getElementById('logList').innerHTML = logs.map(l => `
+      <div class="log-row">
+        <div class="log-mark"></div>
+        <div class="log-body">
+          <div class="log-who">
+            ${l.scanned_by_name}
+            <span class="chip ${l.role==='admin'?'chip-blue':l.role==='faculty'?'chip-green':'chip-amber'}">${l.role}</span>
+            <span class="chip chip-stone">${l.scan_type}</span>
+          </div>
+          <div class="log-asset">${l.asset_code}</div>
+          <div class="log-meta">Room ${l.room_code} · ${fmtDate(l.scanned_at)}${l.notes ? ' · ' + l.notes : ''}</div>
+        </div>
+      </div>
+    `).join('') || `<div class="empty">No scans yet.</div>`;
+  }
+
+  // ── ACTIONS ──
+
+  async function addUser() {
+    const name  = document.getElementById('uName').value.trim();
+    const email = document.getElementById('uEmail').value.trim();
+    const role  = document.getElementById('uRole').value;
+    if (!name || !email) return toast('Name and email required');
+    try {
+      await App.addUser(name, email, role);
+      document.getElementById('uName').value  = '';
+      document.getElementById('uEmail').value = '';
+      lUsers = await App.listUsers();
+      renderUsers();
+      toast(`${name} added`);
+    } catch (e) { toast(e.message); }
+  }
+
+  async function removeUser(id) {
+    try {
+      await App.removeUser(id);
+      lUsers = await App.listUsers();
+      renderUsers();
+      toast('User removed');
+    } catch (e) { toast(e.message); }
+  }
+
+  async function addRoom() {
+    const code      = document.getElementById('rCode').value.trim();
+    const building  = document.getElementById('rBuilding').value;
+    const room_type = document.getElementById('rType').value;
+    if (!code) return toast('Room code required');
+    try {
+      await App.addRoom(code, building, room_type);
+      document.getElementById('rCode').value = '';
+      lRooms = await App.listRooms();
+      renderRooms();
+      toast(`Room ${code} added`);
+    } catch (e) { toast(e.message); }
+  }
+
+  function fillSelects() {
+    const nonAdmin = lUsers.filter(u => u.role !== 'admin');
+    document.getElementById('aUser').innerHTML = nonAdmin.map(u =>
+      `<option value="${u.id}|${u.name}|${u.role}">${u.name} (${u.role})</option>`).join('');
+    document.getElementById('aRoom').innerHTML = lRooms.map(r =>
+      `<option value="${r.id}|${r.code}|${r.room_type}">${r.code} [${r.room_type}]</option>`).join('');
+  }
+
+  async function assign() {
+    const [user_id, uname, role]  = document.getElementById('aUser').value.split('|');
+    const [room_id, rcode, rtype] = document.getElementById('aRoom').value.split('|');
+    if (role === 'faculty'  && rtype !== 'personal') return toast('Faculty → personal rooms only');
+    if (role === 'incharge' && rtype !== 'common')   return toast('Incharge → common rooms only');
+    try {
+      await App.addAssignment(Number(user_id), Number(room_id));
+      lAssign = await App.listAssignments();
+      renderAssign();
+      toast(`${uname} → ${rcode}`);
+    } catch (e) { toast(e.message); }
+  }
+
+  async function removeAssign(id) {
+    try {
+      await App.removeAssignment(id);
+      lAssign = await App.listAssignments();
+      renderAssign();
+      toast('Assignment removed');
+    } catch (e) { toast(e.message); }
+  }
+
+  // Initial load
+  loadTab('users');
+</script>
+</body>
+</html>

@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stock MS · Dashboard</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<nav class="nav">
+  <a href="dashboard.html" class="nav-logo">
+    Stock MS
+    <span class="sep">/</span>
+    <span class="dept">SCIS</span>
+  </a>
+  <div class="nav-right">
+    <div class="nav-info">
+      <span class="nav-name" id="navName"></span>
+      <span class="chip" id="navChip"></span>
+    </div>
+    <button class="btn-ghost" onclick="App.logout()">Sign out</button>
+  </div>
+</nav>
+
+<div class="page">
+
+  <div class="page-head">
+    <div class="page-head-left">
+      <div class="eyebrow">Dashboard</div>
+      <div class="page-title">Asset Overview</div>
+      <div class="page-sub" id="pageSub"></div>
+    </div>
+    <div id="adminBtn"></div>
+  </div>
+
+  <div class="stats-row" id="statsRow"><div class="stat-cell" style="grid-column:1/-1;padding:1.5rem;color:var(--text3);font-size:0.72rem">Loading…</div></div>
+
+  <div class="section-label" style="margin-top:2rem">Rooms &amp; Labs</div>
+  <div class="room-grid" id="roomGrid"><div class="room-cell" style="pointer-events:none;color:var(--text3);font-size:0.72rem">Loading…</div></div>
+
+</div>
+
+<script src="js/app.js"></script>
+<script>
+  if (!App.user) location.href = 'index.html';
+
+  const u = App.user;
+  document.getElementById('navName').textContent = u.name;
+
+  const chip = document.getElementById('navChip');
+  chip.textContent = u.role;
+  chip.className = 'chip ' + (u.role === 'admin' ? 'chip-blue' : u.role === 'faculty' ? 'chip-green' : 'chip-amber');
+
+  if (u.role === 'admin') {
+    document.getElementById('adminBtn').innerHTML =
+      `<a href="admin.html" style="font-size:0.7rem;color:var(--accent);text-decoration:none;border:1px solid var(--accent-border);padding:6px 14px;border-radius:6px;background:var(--accent-bg)">Admin panel →</a>`;
+  }
+
+  async function loadDashboard() {
+    try {
+      const [stats, rooms] = await Promise.all([App.stats(), App.myRooms()]);
+
+      // Sub-heading
+      document.getElementById('pageSub').textContent =
+        u.role === 'admin'
+          ? 'Full access — all buildings and rooms'
+          : `Assigned to: ${rooms.map(r => r.code).join(', ')}`;
+
+      // Stats
+      const pct = stats.total ? Math.round(stats.verified / stats.total * 100) : 0;
+      document.getElementById('statsRow').innerHTML = `
+        <div class="stat-cell" style="animation-delay:0s">
+          <div class="stat-cell-label">Rooms</div>
+          <div class="stat-cell-value">${stats.rooms}</div>
+        </div>
+        <div class="stat-cell" style="animation-delay:.04s">
+          <div class="stat-cell-label">Total Items</div>
+          <div class="stat-cell-value">${stats.total}</div>
+        </div>
+        <div class="stat-cell" style="animation-delay:.08s">
+          <div class="stat-cell-label">Verified</div>
+          <div class="stat-cell-value">${stats.verified}</div>
+          <div class="stat-cell-sub">${pct}% complete</div>
+        </div>
+        <div class="stat-cell" style="animation-delay:.12s">
+          <div class="stat-cell-label">Not Working</div>
+          <div class="stat-cell-value">${stats.broken}</div>
+        </div>
+        <div class="stat-cell" style="animation-delay:.16s">
+          <div class="stat-cell-label">Pending</div>
+          <div class="stat-cell-value">${stats.total - stats.verified}</div>
+          <div class="stat-cell-sub">items to verify</div>
+        </div>
+      `;
+
+      // Room grid
+      // Each room from the API: { id, code, building, room_type, verified, total }
+      // If the API doesn't return verified/total per room, they'll show as 0/0
+      document.getElementById('roomGrid').innerHTML = rooms.length
+        ? rooms.map((r, i) => {
+            const done  = r.verified ?? 0;
+            const total = r.total    ?? 0;
+            const p     = total ? Math.round(done / total * 100) : 0;
+            return `
+              <a class="room-cell" href="items.html?room=${encodeURIComponent(r.code)}" style="animation-delay:${i * .04}s">
+                <div class="room-cell-top">
+                  <div class="room-code-text">${r.code}</div>
+                  <span class="chip ${r.room_type === 'personal' ? 'chip-green' : 'chip-amber'}">${r.room_type}</span>
+                </div>
+                <div class="room-building-text">${r.building}</div>
+                <div class="progress-wrap">
+                  <div class="progress-meta">
+                    <span>${done} / ${total} verified</span>
+                    <span>${p}%</span>
+                  </div>
+                  <div class="progress-track">
+                    <div class="progress-fill ${progressClass(p)}" style="width:${p}%"></div>
+                  </div>
+                </div>
+              </a>`;
+          }).join('')
+        : `<div class="empty">No rooms assigned.</div>`;
+
+    } catch (e) {
+      document.getElementById('statsRow').innerHTML = `<div class="stat-cell" style="grid-column:1/-1;color:var(--red);font-size:0.72rem">Failed to load: ${e.message}</div>`;
+    }
+  }
+
+  loadDashboard();
+</script>
+</body>
+</html>
