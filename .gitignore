@@ -1,0 +1,6 @@
+node_modules/
+frontend/frontend-out/
+dist/
+build/
+.env*
+!.env.example
